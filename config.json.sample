@@ -1,0 +1,9 @@
+{
+    "jid": "123456789@chat.codingame.com",
+    "password": "password123",
+    "host": "chat.codingame.com",
+    "port": 5222,
+    "muc": "conference.codingame.com",
+    "groupchats": ["general_fr", "general"],
+    "nickname": "Automaton2000"
+}
