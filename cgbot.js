@@ -2,22 +2,61 @@
 
 "use strict";
 
-var xmpp = require('simple-xmpp'),
+let xmpp = require('simple-xmpp'),
     config = require('./config.json'),
-    fs = require('fs');
+    fs = require('fs'),
+    moment = require('moment'),
+    _ = require('underscore');
 
-checkDirectory('data');
+checkDirectory('./data');
+
+let words = {};
 
 xmpp.on('online', function(data) {
     config.groupchats.forEach(groupchat => xmpp.join(groupchat + '@' + config.muc + '/' + config.nickname));
+
+    // Read log files for words and line
+    fs.readdirSync('./data').forEach(file => {
+        console.log('Reading log file', file);
+
+        let conference = file.split('-')[0],
+            content = fs.readFileSync('./data/' + file, 'utf-8');
+
+        if (!words[conference]) {
+            words[conference] = {
+                __START__: {
+                    __TOTAL__: 0
+                }
+            };
+        }
+
+        content.split('\n').forEach(line => {
+            line = line.replace(/ +/g, ' ').split(' ');
+
+            if (line.length < 2 || line[1].toLowerCase() === config.nickname.toLowerCase()) {
+                return;
+            }
+
+            line = _.rest(line, 3);
+
+            addLine(conference, line);
+        });
+    });
 });
 
 xmpp.on('error', function(error) {
     console.log('error', error);
 });
 
-xmpp.on('groupchat', function(conference, from, message, stamp) {
+xmpp.on('groupchat', function(conference, from, message) {
+    let now = moment();
+    fs.appendFileSync('./data/' + conference.toLowerCase() + '-' + now.format('YYYY-MM-DD') + '.log', '(' + now.format('HH:mm:ss') + ') ' + from + ' : ' + message.replace(/\n\r/g, ' ') + '\n');
 
+    if (message.toLowerCase().indexOf(config.nickname.toLowerCase()) !== -1) {
+       say(conference, talk(words[conference]) || 'Nope');
+    }
+
+    addLine(conference, message.replace(/ +/g, ' ').split(' '));
 });
 
 xmpp.connect({
@@ -26,6 +65,19 @@ xmpp.connect({
     host: config.host,
     port: config.port
 });
+
+let queue = [];
+
+setInterval(function() {
+    if (queue.length) {
+        let infos = queue[0];
+        xmpp.send(infos.conference, infos.message);
+
+        queue = _.rest(queue);
+    }
+}, 5000);
+
+// *******************************************************
 
 function checkDirectory(path) {
     let stat;
@@ -51,4 +103,98 @@ function checkDirectory(path) {
             process.exit(1);
         }
     }
+}
+
+function getRandomInt(min, max) {
+    return Math.floor(Math.random() * (max - min)) + min;
+}
+
+function addWord(words, from, to) {
+    if (!from || !to || from === '__TOTAL__' || to === '__TOTAL__' || from.toLowerCase() === config.nickname.toLowerCase() || to.toLowerCase() === config.nickname.toLowerCase()) {
+        return;
+    }
+
+    if (!words[from]) {
+        words[from] = {
+            __TOTAL__: 0
+        };
+    }
+
+    words[from][to] = words[from][to] || 0;
+    words[from][to] += 1;
+    words[from].__TOTAL__ += 1;
+}
+
+function addLine(conference, line) {
+    if (line.length < 2) {
+        return;
+    }
+
+    if (!words[conference]) {
+        words[conference] = {};
+    }
+
+    addWord(words[conference], '__START__', line[0]);
+
+    for (let i = 0; i < line.length; ++i) {
+        addWord(words[conference], line[i - 1], line[i]);
+    }
+
+    addWord(words[conference], line[line.length - 1], '__END__');
+}
+
+function say(conference, message) {
+    queue.push({
+        conference: conference,
+        message: message
+    });
+}
+
+function talk(words) {
+    let result = [],
+        word = '__START__';
+
+    if (!words) {
+        return '';
+    }
+
+    while (word !== '__END__' && result.length < 25) {
+        if (!words[word] || (result.length > 20 && words[word].__END__)) {
+            break;
+        }
+
+        let total = words[word].__TOTAL__ + 1;
+
+        if (result.length < 2 && words[word].__END__) {
+            total -= words[word].__END__;
+        }
+
+        if (total <= 1) {
+            break;
+        }
+
+        let random = getRandomInt(0, total);
+
+        for (let key in words[word]) {
+            if (key !== '__TOTAL__' && !(result.length < 2 && key === '__END__')) {
+                random -= words[word][key];
+
+                if (random <= 0) {
+                    if (key !== '__END__') {
+                        result.push(key);
+                    }
+
+                    word = key;
+
+                    break;
+                }
+            }
+        }
+    }
+
+    if (result.length <= 0) {
+        return 'Nope';
+    }
+
+    return result.join(' ');
 }
