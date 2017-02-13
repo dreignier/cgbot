@@ -71,7 +71,7 @@ let queue = [];
 setInterval(function() {
     if (queue.length) {
         let infos = queue[0];
-        xmpp.send(infos.conference, infos.message);
+        xmpp.send(infos.conference, infos.message, true);
 
         queue = _.rest(queue);
     }
