@@ -6,11 +6,13 @@ let xmpp = require('simple-xmpp'),
     config = require('./config.json'),
     fs = require('fs'),
     moment = require('moment'),
-    _ = require('underscore');
+    _ = require('underscore'),
+    Stanza = require('node-xmpp-client').Stanza;
 
 checkDirectory('./data');
 
-let words = {};
+let words = {},
+    resource = new Date().getTime();
 
 xmpp.on('online', function(data) {
     config.groupchats.forEach(groupchat => xmpp.join(groupchat + '@' + config.muc + '/' + config.nickname));
@@ -48,7 +50,7 @@ xmpp.on('error', function(error) {
     console.log('error', error);
 });
 
-xmpp.on('groupchat', function(conference, from, message) {
+xmpp.on('groupchat', function(conference, from, message, stamp, delay) {
     let now = moment();
     fs.appendFileSync('./data/' + conference.toLowerCase() + '-' + now.format('YYYY-MM-DD') + '.log', '(' + now.format('HH:mm:ss') + ') ' + from + ' : ' + message.replace(/\n\r/g, ' ') + '\n');
 
@@ -58,6 +60,10 @@ xmpp.on('groupchat', function(conference, from, message) {
 
     addLine(conference, message.replace(/ +/g, ' ').split(' '));
 });
+
+/*xmpp.on('stanza', function(stanza) {
+    console.log(JSON.stringify(stanza));
+});*/
 
 xmpp.connect({
     jid: config.jid,
@@ -71,7 +77,14 @@ let queue = [];
 setInterval(function() {
     if (queue.length) {
         let infos = queue[0];
-        xmpp.send(infos.conference, infos.message, true);
+
+        let stanza = new Stanza('message', {
+            to: infos.conference,
+            type: 'groupchat',
+            id: config.nickname + (new Date().getTime())
+        });
+        stanza.c('body').t(infos.message);
+        xmpp.conn.send(stanza)
 
         queue = _.rest(queue);
     }
