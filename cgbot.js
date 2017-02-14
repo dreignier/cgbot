@@ -51,6 +51,10 @@ xmpp.on('error', function(error) {
 });
 
 xmpp.on('groupchat', function(conference, from, message, stamp, delay) {
+    if (from.toLowerCase() === config.nickname.toLowerCase()) {
+        return;
+    }
+
     let now = moment();
     fs.appendFileSync('./data/' + conference.toLowerCase() + '-' + now.format('YYYY-MM-DD') + '.log', '(' + now.format('HH:mm:ss') + ') ' + from + ' : ' + message.replace(/\n\r/g, ' ') + '\n');
 
@@ -123,7 +127,7 @@ function getRandomInt(min, max) {
 }
 
 function addWord(words, from, to) {
-    if (!from || !to || from === '__TOTAL__' || to === '__TOTAL__' || from.toLowerCase() === config.nickname.toLowerCase() || to.toLowerCase() === config.nickname.toLowerCase()) {
+    if (!from || !to || from === '__TOTAL__' || to === '__TOTAL__' || from.toLowerCase().indexOf(config.nickname.toLowerCase()) !== -1 || to.toLowerCase().indexOf(config.nickname.toLowerCase()) !== -1) {
         return;
     }
 
