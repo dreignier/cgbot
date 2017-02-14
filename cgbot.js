@@ -44,6 +44,8 @@ xmpp.on('online', function(data) {
             addLine(conference, line);
         });
     });
+
+    fs.writeFileSync('./data/words.json', JSON.stringify(words, null, 4));
 });
 
 xmpp.on('error', function(error) {
@@ -93,6 +95,10 @@ setInterval(function() {
         queue = _.rest(queue);
     }
 }, 5000);
+
+setInterval(function() {
+    fs.writeFileSync('./data/words.json', JSON.stringify(words, null, 4));
+}, 300000);
 
 // *******************************************************
 
