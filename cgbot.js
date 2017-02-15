@@ -19,6 +19,10 @@ xmpp.on('online', function(data) {
 
     // Read log files for words and line
     fs.readdirSync('./data').forEach(file => {
+        if (file === 'words.json') {
+            return;
+        }
+
         console.log('Reading log file', file);
 
         let conference = file.split('-')[0],
@@ -60,9 +64,9 @@ xmpp.on('groupchat', function(conference, from, message, stamp, delay) {
     let now = moment();
     fs.appendFileSync('./data/' + conference.toLowerCase() + '-' + now.format('YYYY-MM-DD') + '.log', '(' + now.format('HH:mm:ss') + ') ' + from + ' : ' + message.replace(/\n\r/g, ' ') + '\n');
 
-    if (message.toLowerCase().indexOf(config.nickname.toLowerCase()) !== -1) {
+    // if (message.toLowerCase().indexOf(config.nickname.toLowerCase()) !== -1) {
        say(conference, talk(words[conference]) || 'Nope');
-    }
+    // }
 
     addLine(conference, message.replace(/ +/g, ' ').split(' '));
 });
@@ -90,7 +94,9 @@ setInterval(function() {
             id: config.nickname + (new Date().getTime())
         });
         stanza.c('body').t(infos.message);
-        xmpp.conn.send(stanza)
+        // xmpp.conn.send(stanza)
+
+        console.log(infos.message);
 
         queue = _.rest(queue);
     }
@@ -133,8 +139,8 @@ function getRandomInt(min, max) {
 }
 
 function addWord(words, from, to) {
-    if (!from || !to || from === '__TOTAL__' || to === '__TOTAL__' || from.toLowerCase().indexOf(config.nickname.toLowerCase()) !== -1 || to.toLowerCase().indexOf(config.nickname.toLowerCase()) !== -1) {
-        return;
+    if (_.isArray(from)) {
+        from = from.join(' ');
     }
 
     if (!words[from]) {
@@ -148,8 +154,31 @@ function addWord(words, from, to) {
     words[from].__TOTAL__ += 1;
 }
 
+function clearLine(line) {
+    return line.filter(function(word) {
+        // Ignore empty words
+        if (!word || !word.trim()) {
+            return false;
+        }
+
+        // Ignore our own nickname
+        if (word.toLowerCase().indexOf(config.nickname.toLowerCase()) !== -1) {
+            return false;
+        }
+
+        // Ignore key words
+        if (word.indexOf('__START__') !== -1 || word.indexOf('__END__') !== -1 || word.indexOf('__TOTAL__') !== -1) {
+            return false;
+        }
+
+        return true;
+    });
+}
+
 function addLine(conference, line) {
-    if (line.length < 2) {
+    line = clearLine(line);
+
+    if (line.length < 2 || line.length < config.power) {
         return;
     }
 
@@ -157,13 +186,29 @@ function addLine(conference, line) {
         words[conference] = {};
     }
 
-    addWord(words[conference], '__START__', line[0]);
+    if (config.power === 1) {
+        addWord(words[conference], '__START__', line[0]);
 
-    for (let i = 0; i < line.length; ++i) {
-        addWord(words[conference], line[i - 1], line[i]);
+        for (let i = 0; i < line.length; ++i) {
+            addWord(words[conference], line[i - 1], line[i]);
+        }
+
+        addWord(words[conference], line[line.length - 1], '__END__');
+    } else {
+        let first = _.first(line, config.power - 1);
+
+        addWord(words[conference], '__START__', first.join(' '));
+
+        let history = ['__START__'].concat(first);
+
+        for (let i = config.power - 1; i < line.length; ++i) {
+            addWord(words[conference], history, line[i]);
+            history.shift();
+            history.push(line[i]);
+        }
+
+        addWord(words[conference], history, '__END__');
     }
-
-    addWord(words[conference], line[line.length - 1], '__END__');
 }
 
 function say(conference, message) {
@@ -173,47 +218,63 @@ function say(conference, message) {
     });
 }
 
-function talk(words) {
-    let result = [],
-        word = '__START__';
+function randomNext(words, length) {
+    if (!words) {
+        return null;
+    }
 
+    let total = words.__TOTAL__ + 1;
+
+    if (length < config.power + 2 && words.__END__) {
+        total -= words.__END__;
+    }
+
+    if (total <= 1) {
+        return null;
+    }
+
+    let random = getRandomInt(0, total);
+
+    for (let key in words) {
+        if (key !== '__TOTAL__' && !(length < config.power + 2 && key === '__END__')) {
+            random -= words[key];
+
+            if (random <= 0) {
+                return key === '__END__' ? null : key;
+            }
+        }
+    }
+}
+
+function talk(words) {
     if (!words) {
         return '';
     }
 
-    while (word !== '__END__' && result.length < 25) {
-        if (!words[word] || (result.length > 20 && words[word].__END__)) {
+    let result = ['__START__'].concat(randomNext(words.__START__, 0).split(' '));
+
+    if (!result || result.length <= 0) {
+        return 'Nope';
+    }
+
+    while (result.length < 26) {
+        let word = _.last(result, config.power).join(' ');
+
+        if (!words[word] || (result.length > 21 && words[word].__END__)) {
             break;
         }
 
-        let total = words[word].__TOTAL__ + 1;
+        let next = randomNext(words[word], result.length);
 
-        if (result.length < 2 && words[word].__END__) {
-            total -= words[word].__END__;
-        }
-
-        if (total <= 1) {
+        if (next) {
+            result.push(next);
+        } else {
             break;
-        }
-
-        let random = getRandomInt(0, total);
-
-        for (let key in words[word]) {
-            if (key !== '__TOTAL__' && !(result.length < 2 && key === '__END__')) {
-                random -= words[word][key];
-
-                if (random <= 0) {
-                    if (key !== '__END__') {
-                        result.push(key);
-                    }
-
-                    word = key;
-
-                    break;
-                }
-            }
         }
     }
+
+    // Remove __START__
+    result.shift();
 
     if (result.length <= 0) {
         return 'Nope';
