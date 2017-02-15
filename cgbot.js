@@ -64,9 +64,9 @@ xmpp.on('groupchat', function(conference, from, message, stamp, delay) {
     let now = moment();
     fs.appendFileSync('./data/' + conference.toLowerCase() + '-' + now.format('YYYY-MM-DD') + '.log', '(' + now.format('HH:mm:ss') + ') ' + from + ' : ' + message.replace(/\n\r/g, ' ') + '\n');
 
-    // if (message.toLowerCase().indexOf(config.nickname.toLowerCase()) !== -1) {
+    if (message.toLowerCase().indexOf(config.nickname.toLowerCase()) !== -1) {
        say(conference, talk(words[conference]) || 'Nope');
-    // }
+    }
 
     addLine(conference, message.replace(/ +/g, ' ').split(' '));
 });
@@ -94,9 +94,7 @@ setInterval(function() {
             id: config.nickname + (new Date().getTime())
         });
         stanza.c('body').t(infos.message);
-        // xmpp.conn.send(stanza)
-
-        console.log(infos.message);
+        xmpp.conn.send(stanza);
 
         queue = _.rest(queue);
     }
