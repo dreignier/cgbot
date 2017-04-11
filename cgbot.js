@@ -218,7 +218,7 @@ function say(conference, message) {
 
 function randomNext(words, length) {
     if (!words) {
-        return null;
+        return '';
     }
 
     let total = words.__TOTAL__ + 1;
@@ -228,7 +228,7 @@ function randomNext(words, length) {
     }
 
     if (total <= 1) {
-        return null;
+        return '';
     }
 
     let random = getRandomInt(0, total);
@@ -238,7 +238,7 @@ function randomNext(words, length) {
             random -= words[key];
 
             if (random <= 0) {
-                return key === '__END__' ? null : key;
+                return key === '__END__' ? '' : key;
             }
         }
     }
