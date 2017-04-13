@@ -242,6 +242,8 @@ function randomNext(words, length) {
             }
         }
     }
+
+    return '';
 }
 
 function talk(words) {
