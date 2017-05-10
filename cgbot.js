@@ -187,7 +187,7 @@ function addLine(conference, line) {
     if (config.power === 1) {
         addWord(words[conference], '__START__', line[0]);
 
-        for (let i = 0; i < line.length; ++i) {
+        for (let i = 1; i < line.length; ++i) {
             addWord(words[conference], line[i - 1], line[i]);
         }
 
