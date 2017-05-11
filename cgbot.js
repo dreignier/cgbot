@@ -65,7 +65,7 @@ xmpp.on('groupchat', function(conference, from, message, stamp, delay) {
     fs.appendFileSync('./data/' + conference.toLowerCase() + '-' + now.format('YYYY-MM-DD') + '.log', '(' + now.format('HH:mm:ss') + ') ' + from + ' : ' + message.replace(/\n\r/g, ' ') + '\n');
 
     if (message.toLowerCase().indexOf(config.nickname.toLowerCase()) !== -1) {
-       say(conference, talk(words[conference]) || 'Nope');
+       say(conference, talk(words[conference]) || 'Magus: Error line 68');
     }
 
     addLine(conference, message.replace(/ +/g, ' ').split(' '));
@@ -254,7 +254,7 @@ function talk(words) {
     let result = ['__START__'].concat(randomNext(words.__START__, 0).split(' '));
 
     if (!result || result.length <= 0) {
-        return 'Nope';
+        return 'Magus: Error line 257';
     }
 
     while (result.length < 26) {
@@ -277,7 +277,7 @@ function talk(words) {
     result.shift();
 
     if (result.length <= 0) {
-        return 'Nope';
+        return 'Magus: Error line 280';
     }
 
     return result.join(' ');
