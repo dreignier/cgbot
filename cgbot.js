@@ -68,7 +68,7 @@ xmpp.on('groupchat', function(conference, from, message, stamp, delay) {
         if (!words[conference]) {
             say(conference, 'Magus: empty words for ' + conference);
         } else {
-            say(conference, talk(words[conference]) || 'Magus: Error line 68');    
+            say(conference, talk(words[conference]) || 'Magus: Error line 71');    
         }
     }
 
@@ -232,6 +232,7 @@ function randomNext(words, length) {
     }
 
     if (total <= 1) {
+        console.log('ouch 235');
         return '';
     }
 
@@ -247,18 +248,19 @@ function randomNext(words, length) {
         }
     }
 
+    console.log('ouch 251')
     return '';
 }
 
 function talk(words) {
     if (!words) {
-        return '';
+        return 'Magus: Error line 255';
     }
 
     let result = ['__START__'].concat(randomNext(words.__START__, 0).split(' '));
 
     if (!result || result.length <= 0) {
-        return 'Magus: Error line 257';
+        return 'Magus: Error line 261';
     }
 
     while (result.length < 26) {
@@ -273,6 +275,7 @@ function talk(words) {
         if (next) {
             result.push(next);
         } else {
+            return 'Magus: Empty words for ' + word
             break;
         }
     }
@@ -281,7 +284,7 @@ function talk(words) {
     result.shift();
 
     if (result.length <= 0) {
-        return 'Magus: Error line 280';
+        return 'Magus: Error line 285';
     }
 
     return result.join(' ');
