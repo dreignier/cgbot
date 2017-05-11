@@ -65,7 +65,13 @@ xmpp.on('groupchat', function(conference, from, message, stamp, delay) {
     fs.appendFileSync('./data/' + conference.toLowerCase() + '-' + now.format('YYYY-MM-DD') + '.log', '(' + now.format('HH:mm:ss') + ') ' + from + ' : ' + message.replace(/\n\r/g, ' ') + '\n');
 
     if (message.toLowerCase().indexOf(config.nickname.toLowerCase()) !== -1) {
-        say(conference, talk(words[conference]) || 'Magus: Error line 68');
+        let output;
+        
+        do {
+            output = talk(words[conference]);
+        } while (!output || !output.trim());
+        
+        say(conference, output);
     }
 
     addLine(conference, message.replace(/ +/g, ' ').split(' '));
@@ -100,9 +106,9 @@ setInterval(function() {
     }
 }, 5000);
 
-setInterval(function() {
-    fs.writeFileSync('./data/words.json', JSON.stringify(words, null, 4));
-}, 300000);
+// setInterval(function() {
+//    fs.writeFileSync('./data/words.json', JSON.stringify(words, null, 4));
+// }, 300000);
 
 // *******************************************************
 
@@ -218,7 +224,7 @@ function say(conference, message) {
 
 function randomNext(words, length) {
     if (!words) {
-        return 'Magus EMPTY211';
+        return '';
     }
 
     let total = words.__TOTAL__ + 1;
@@ -228,7 +234,7 @@ function randomNext(words, length) {
     }
 
     if (total <= 1) {
-        return 'Magus EMPTY232';
+        return '';
     }
 
     let random = getRandomInt(0, total);
@@ -243,7 +249,7 @@ function randomNext(words, length) {
         }
     }
 
-    return 'Magus EMPTY246';
+    return '';
 }
 
 function talk(words) {
