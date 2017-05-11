@@ -65,11 +65,7 @@ xmpp.on('groupchat', function(conference, from, message, stamp, delay) {
     fs.appendFileSync('./data/' + conference.toLowerCase() + '-' + now.format('YYYY-MM-DD') + '.log', '(' + now.format('HH:mm:ss') + ') ' + from + ' : ' + message.replace(/\n\r/g, ' ') + '\n');
 
     if (message.toLowerCase().indexOf(config.nickname.toLowerCase()) !== -1) {
-        if (!words[conference]) {
-            say(conference, 'Magus: empty words for ' + conference);
-        } else {
-            say(conference, talk(words[conference]) || 'Magus: Error line 71');    
-        }
+        say(conference, talk(words[conference]) || 'Magus: Error line 68');
     }
 
     addLine(conference, message.replace(/ +/g, ' ').split(' '));
@@ -222,7 +218,7 @@ function say(conference, message) {
 
 function randomNext(words, length) {
     if (!words) {
-        return '';
+        return 'Magus EMPTY211';
     }
 
     let total = words.__TOTAL__ + 1;
@@ -232,8 +228,7 @@ function randomNext(words, length) {
     }
 
     if (total <= 1) {
-        console.log('ouch 235');
-        return '';
+        return 'Magus EMPTY232';
     }
 
     let random = getRandomInt(0, total);
@@ -248,19 +243,18 @@ function randomNext(words, length) {
         }
     }
 
-    console.log('ouch 251')
-    return '';
+    return 'Magus EMPTY246';
 }
 
 function talk(words) {
     if (!words) {
-        return 'Magus: Error line 255';
+        return 'Magus: Error line 253';
     }
 
     let result = ['__START__'].concat(randomNext(words.__START__, 0).split(' '));
 
     if (!result || result.length <= 0) {
-        return 'Magus: Error line 261';
+        return 'Magus: Error line 259';
     }
 
     while (result.length < 26) {
@@ -275,7 +269,6 @@ function talk(words) {
         if (next) {
             result.push(next);
         } else {
-            return 'Magus: Empty words for ' + word
             break;
         }
     }
@@ -284,7 +277,7 @@ function talk(words) {
     result.shift();
 
     if (result.length <= 0) {
-        return 'Magus: Error line 285';
+        return 'Magus: Error line 283';
     }
 
     return result.join(' ');
