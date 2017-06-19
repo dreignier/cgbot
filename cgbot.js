@@ -12,7 +12,9 @@ let xmpp = require('simple-xmpp'),
 checkDirectory('./data');
 
 let words = {},
-    resource = new Date().getTime();
+    resource = new Date().getTime(),
+    findNickRegExp = new RegExp(config.nickname.toLowerCase(), 'gi'),
+    replaceNickRegExp = /__NICK__/gi;
 
 xmpp.on('online', function(data) {
     config.groupchats.forEach(groupchat => xmpp.join(groupchat + '@' + config.muc + '/' + config.nickname));
@@ -66,11 +68,13 @@ xmpp.on('groupchat', function(conference, from, message, stamp, delay) {
 
     if (message.toLowerCase().indexOf(config.nickname.toLowerCase()) !== -1) {
         let output;
-        
+
         do {
             output = talk(words[conference]);
         } while (!output || !output.trim());
-        
+
+        output = output.replace(replaceNickRegExp, from);
+
         say(conference, output);
     }
 
@@ -165,11 +169,6 @@ function clearLine(line) {
             return false;
         }
 
-        // Ignore our own nickname
-        if (word.toLowerCase().indexOf(config.nickname.toLowerCase()) !== -1) {
-            return false;
-        }
-
         // Ignore key words
         if (word.indexOf('__START__') !== -1 || word.indexOf('__END__') !== -1 || word.indexOf('__TOTAL__') !== -1) {
             return false;
@@ -181,6 +180,11 @@ function clearLine(line) {
 
 function addLine(conference, line) {
     line = clearLine(line);
+
+    // Replace our nickname by __NICK__
+    line = line.map(function(word) {
+        return word.replace(findNickRegExp, '__NICK__');
+    });
 
     if (line.length < 2 || line.length < config.power) {
         return;
