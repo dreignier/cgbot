@@ -17,41 +17,46 @@ let words = {},
     replaceNickRegExp = /__NICK__/gi;
 
 xmpp.on('online', function(data) {
-    config.groupchats.forEach(groupchat => xmpp.join(groupchat + '@' + config.muc + '/' + config.nickname));
-
     // Read log files for words and line
-    fs.readdirSync('./data').forEach(file => {
-        if (file === 'words.json') {
-            return;
-        }
-
-        console.log('Reading log file', file);
-
-        let conference = file.split('-')[0],
-            content = fs.readFileSync('./data/' + file, 'utf-8');
-
-        if (!words[conference]) {
-            words[conference] = {
-                __START__: {
-                    __TOTAL__: 0
-                }
-            };
-        }
-
-        content.split('\n').forEach(line => {
-            line = line.replace(/ +/g, ' ').split(' ');
-
-            if (line.length < 2 || line[1].toLowerCase() === config.nickname.toLowerCase()) {
+    fs.readdir('./data', (error, files) => {
+        Promise.all(files.map(file => {
+            if (file === 'words.json') {
                 return;
             }
 
-            line = _.rest(line, 3);
+            console.log('Reading log file', file);
 
-            addLine(conference, line);
-        });
+            let conference = file.split('-')[0];
+
+            return new Promise(resolve => {
+                fs.readFile('./data/' + file, { encoding: 'utf-8' }, (error, content) => {
+                    if (!words[conference]) {
+                        words[conference] = {
+                            __START__: {
+                                __TOTAL__: 0
+                            }
+                        };
+                    }
+
+                    content.split('\n').forEach(line => {
+                        line = line.replace(/ +/g, ' ').split(' ');
+
+                        if (line.length < 2 || line[1].toLowerCase() === config.nickname.toLowerCase()) {
+                            return;
+                        }
+
+                        line = _.rest(line, 3);
+
+                        addLine(conference, line);
+                    });
+
+                    resolve();
+                });
+            });
+        }))
+
+        .then(() => config.groupchats.forEach(groupchat => xmpp.join(groupchat + '@' + config.muc + '/' + config.nickname)));
     });
-
-    fs.writeFileSync('./data/words.json', JSON.stringify(words, null, 4));
 });
 
 xmpp.on('error', function(error) {
