@@ -24,8 +24,6 @@ xmpp.on('online', function(data) {
                 return;
             }
 
-            console.log('Reading log file', file);
-
             let conference = file.split('-')[0];
 
             return new Promise(resolve => {
@@ -49,6 +47,8 @@ xmpp.on('online', function(data) {
 
                         addLine(conference, line);
                     });
+
+                    console.log('Handling log file', file);
 
                     resolve();
                 });
