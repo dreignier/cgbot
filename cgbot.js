@@ -28,7 +28,7 @@ xmpp.on('online', function(data) {
 
             return new Promise(resolve => {
                 fs.readFile('./data/' + file, { encoding: 'utf-8' }, (error, content) => {
-                    if (errror) {
+                    if (error) {
                         console.error('Unable to read file', file, error);    
                     }
                     
