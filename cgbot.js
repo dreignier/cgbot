@@ -87,6 +87,10 @@ xmpp.on('groupchat', function(conference, from, message, stamp, delay) {
         output = output.replace(replaceNickRegExp, from);
 
         say(conference, output);
+        
+        if (global.gc) {
+            global.gc();
+        }
     }
 
     addLine(conference, message.replace(/ +/g, ' ').split(' '));
