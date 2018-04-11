@@ -28,6 +28,10 @@ xmpp.on('online', function(data) {
 
             return new Promise(resolve => {
                 fs.readFile('./data/' + file, { encoding: 'utf-8' }, (error, content) => {
+                    if (errror) {
+                        console.error('Unable to read file', file, error);    
+                    }
+                    
                     if (!words[conference]) {
                         words[conference] = {
                             __START__: {
@@ -73,6 +77,8 @@ xmpp.on('groupchat', function(conference, from, message, stamp, delay) {
 
     if (message.toLowerCase().indexOf(config.nickname.toLowerCase()) !== -1) {
         let output;
+        
+        console.log('Responding to', from, 'on', conference);
 
         do {
             output = talk(words[conference]);
@@ -263,13 +269,15 @@ function randomNext(words, length) {
 
 function talk(words) {
     if (!words) {
-        return 'Magus: Error line 253';
+        return 'Magus: Error line 269';
     }
+    
+    console.log('Searching in', _.size(words), 'words');
 
     let result = ['__START__'].concat(randomNext(words.__START__, 0).split(' '));
 
     if (!result || result.length <= 0) {
-        return 'Magus: Error line 259';
+        return 'Magus: Error line 277';
     }
 
     while (result.length < 26) {
@@ -292,7 +300,7 @@ function talk(words) {
     result.shift();
 
     if (result.length <= 0) {
-        return 'Magus: Error line 283';
+        return 'Magus: Error line 300';
     }
 
     return result.join(' ');
