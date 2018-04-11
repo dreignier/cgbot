@@ -288,6 +288,8 @@ function talk(words) {
         }
 
         let next = randomNext(words[word], result.length);
+        
+        console.log('Found next', next);
 
         if (next) {
             result.push(next);
@@ -298,6 +300,8 @@ function talk(words) {
 
     // Remove __START__
     result.shift();
+    
+    console.log('Talk result', result);
 
     if (result.length <= 0) {
         return 'Magus: Error line 300';
