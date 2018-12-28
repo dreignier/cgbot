@@ -2,310 +2,407 @@
 
 "use strict";
 
-let xmpp = require('simple-xmpp'),
-    config = require('./config.json'),
-    fs = require('fs'),
-    moment = require('moment'),
-    _ = require('underscore'),
-    Stanza = require('node-xmpp-client').Stanza;
+// *****************************
+// Requires
 
-checkDirectory('./data');
+const xmpp = require('simple-xmpp'),
+      config = require('./config.json'),
+      fs = require('fs'),
+      moment = require('moment'),
+      _ = require('underscore'),
+      Stanza = require('node-xmpp-client').Stanza,
+      yargs = require('yargs'),
+      util = require('util'),
+      path = require('path'),
+      crypto = require('crypto');
 
-let words = {},
-    resource = new Date().getTime(),
-    findNickRegExp = new RegExp(config.nickname.toLowerCase(), 'gi'),
-    replaceNickRegExp = /__NICK__/gi;
+// *****************************
+// Globals
 
-xmpp.on('online', function(data) {
-    // Read log files for words and line
-    fs.readdir('./data', (error, files) => {
-        Promise.all(files.map(file => {
-            if (file === 'words.json') {
-                return;
-            }
+const NICK = '__NICK__',
+      START = '__START__',
+      END = '__END__',
+      FIND_NICK_REGEXP = new RegExp(config.nickname.toLowerCase(), 'gi'),
+      CLEAN_MESSAGE_REGEXP = new RegExp('(' + ['[\\n\\g\\t]', NICK, START, END].join(')|(') + ')', 'gi'),
+      REPLACE_NICK_REGEXP = new RegExp(NICK, 'gi'),
+      MODE_NONE = 0,
+      MODE_IGNORE_END = 1,
+      MODE_FORCE_END = 2;
 
-            let conference = file.split('-')[0];
+let bots = {};
 
-            return new Promise(resolve => {
-                fs.readFile('./data/' + file, { encoding: 'utf-8' }, (error, content) => {
-                    if (error) {
-                        console.error('Unable to read file', file, error);    
-                    }
-                    
-                    if (!words[conference]) {
-                        words[conference] = {
-                            __START__: {
-                                __TOTAL__: 0
-                            }
-                        };
-                    }
+// *****************************
+// Functions and classes
 
-                    content.split('\n').forEach(line => {
-                        line = line.replace(/ +/g, ' ').split(' ');
+let fsStat = util.promisify(fs.stat),
+    fsMkdir = util.promisify(fs.mkdir),
+    fsReaddir = util.promisify(fs.readdir),
+    fsUnlink = util.promisify(fs.unlink),
+    fsReadFile = util.promisify(fs.readFile),
+    fsWriteFile = util.promisify(fs.writeFile);
 
-                        if (line.length < 2 || line[1].toLowerCase() === config.nickname.toLowerCase()) {
-                            return;
-                        }
-
-                        line = _.rest(line, 3);
-
-                        addLine(conference, line);
-                    });
-
-                    console.log('Handling log file', file);
-
-                    resolve();
-                });
-            });
-        }))
-
-        .then(() => config.groupchats.forEach(groupchat => xmpp.join(groupchat + '@' + config.muc + '/' + config.nickname)));
-    });
-});
-
-xmpp.on('error', function(error) {
-    console.log('error', error);
-});
-
-xmpp.on('groupchat', function(conference, from, message, stamp, delay) {
-    if (from.toLowerCase() === config.nickname.toLowerCase()) {
-        return;
-    }
-
-    let now = moment();
-    fs.appendFileSync('./data/' + conference.toLowerCase() + '-' + now.format('YYYY-MM-DD') + '.log', '(' + now.format('HH:mm:ss') + ') ' + from + ' : ' + message.replace(/\n\r/g, ' ') + '\n');
-
-    if (message.toLowerCase().indexOf(config.nickname.toLowerCase()) !== -1) {
-        let output;
-        
-        console.log('Responding to', from, 'on', conference);
-
-        do {
-            output = talk(words[conference]);
-        } while (!output || !output.trim());
-
-        output = output.replace(replaceNickRegExp, from);
-
-        say(conference, output);
-        
-        if (global.gc) {
-            global.gc();
-        }
-    }
-
-    addLine(conference, message.replace(/ +/g, ' ').split(' '));
-});
-
-/*xmpp.on('stanza', function(stanza) {
-    console.log(JSON.stringify(stanza));
-});*/
-
-xmpp.connect({
-    jid: config.jid,
-    password: config.password,
-    host: config.host,
-    port: config.port
-});
-
-let queue = [];
-
-setInterval(function() {
-    if (queue.length) {
-        let infos = queue[0];
-
-        let stanza = new Stanza('message', {
-            to: infos.conference,
-            type: 'groupchat',
-            id: config.nickname + (new Date().getTime())
-        });
-        stanza.c('body').t(infos.message);
-        xmpp.conn.send(stanza);
-
-        queue = _.rest(queue);
-    }
-}, 5000);
-
-// setInterval(function() {
-//    fs.writeFileSync('./data/words.json', JSON.stringify(words, null, 4));
-// }, 300000);
-
-// *******************************************************
-
-function checkDirectory(path) {
+let checkDirectory = async (dir) => {
     let stat;
 
     try {
-        stat = fs.statSync(path);
-    } catch (error) {
+        stat = await fsStat(dir);
+    } catch {
 
     }
 
     if (!stat || !stat.isDirectory()) {
-        console.log('Creating the directory', path);
-        fs.mkdirSync(path);
+        console.log('Creating the directory', dir);
+
+        await fsMkdir(dir);
 
         try {
-            stat = fs.statSync(path);
+            stat = await fsStat(dir);
         } catch (error) {
 
         }
 
         if (!stat || !stat.isDirectory()) {
-            console.error('Unable to create the directory', path);
-            process.exit(1);
+            throw new Error('Unable to create the directory ' + dir);
         }
     }
-}
+};
 
-function getRandomInt(min, max) {
-    return Math.floor(Math.random() * (max - min)) + min;
-}
+let clearDirectory = async (dir) => {
+    try {
+        await Promise.all((await fsReaddir(dir)).map(file => fsUnlink(path.join(dir, file))));
+    } catch {
 
-function addWord(words, from, to) {
-    if (_.isArray(from)) {
-        from = from.join(' ');
+    }
+};
+
+let cleanMessage = (message) => {
+    return message.replace(CLEAN_MESSAGE_REGEXP, ' ').trim().replace(/\s\s+/g, ' ');
+};
+
+class DAO {
+    constructor(dir) {
+        this.dir = dir;
+        this.queues = {};
+        this.started = {};
     }
 
-    if (!words[from]) {
-        words[from] = {
-            __TOTAL__: 0
+    async write(file, data) {
+        await fsWriteFile(file, JSON.stringify(data));
+    }
+
+    async start(key) {
+        let queue = this.queues[key],
+            action = queue[0];
+
+        if (!action) {
+            if (queue.length) {
+                queue.unshift();
+            }
+
+            if (queue.length) {
+                this.start(key);
+            } else {
+                this.started[key] = false;
+            }
+
+            return;
+        }
+
+        let file = path.join(this.dir, action.dir, key),
+            data;
+
+        if (action.type === 'get') {
+            try {
+                data = JSON.parse((await fsReadFile(file)).toString('utf8'));
+            } catch {
+                data = {
+                    words : action.value,
+                    total: 0,
+                    nexts: {}
+                };
+
+                await this.write(file, data);
+            }
+
+            action.resolve(data);
+            queue.shift();
+        } else if (action.type === 'set') {
+            data = action.value;
+
+            await this.write(file, data);
+
+            action.resolve();
+            queue.shift();
+        }
+
+        while (queue.length && queue[0].type === 'get') {
+            queue[0].resolve(data);
+            queue.shift();
+        }
+
+        if (queue.length) {
+            this.start(key);
+        } else {
+            this.started[key] = false;
+        }
+    }
+
+    queue(dir, key, type, value) {
+        key = crypto.createHash('md5').update(dir + key).digest('hex');
+
+        if (!this.queues[key]) {
+            this.queues[key] = [];
+        }
+
+        let result = new Promise((resolve, reject) => {
+            this.queues[key].push({
+                dir: dir,
+                type: type,
+                value: value,
+                resolve: resolve,
+                reject: reject
+            });
+        });
+
+        if (!this.started[key]) {
+            this.started[key] = true;
+            this.start(key);
+        }
+
+        return result;
+    }
+
+    async get(dir, key) {
+        return await this.queue(dir, key, 'get', key);
+    }
+
+    set(dir, key, value) {
+        return this.queue(dir, key, 'set', value);
+    }
+}
+
+const dao = new DAO(config.data);
+
+class Bot {
+    constructor(conference) {
+        this.conference = conference;
+        this.index = {
+            total: 0,
+            starts: {}
         };
     }
 
-    words[from][to] = words[from][to] || 0;
-    words[from][to] += 1;
-    words[from].__TOTAL__ += 1;
-}
+    async add(from, to) {
+        let data = await dao.get(this.conference, from);
 
-function clearLine(line) {
-    return line.filter(function(word) {
-        // Ignore empty words
-        if (!word || !word.trim()) {
-            return false;
+        if (!data.nexts[to]) {
+            data.nexts[to] = 0;
         }
 
-        // Ignore key words
-        if (word.indexOf('__START__') !== -1 || word.indexOf('__END__') !== -1 || word.indexOf('__TOTAL__') !== -1) {
-            return false;
-        }
+        data.nexts[to] += 1;
+        data.total += 1;
 
-        return true;
-    });
-}
-
-function addLine(conference, line) {
-    line = clearLine(line);
-
-    // Replace our nickname by __NICK__
-    line = line.map(function(word) {
-        return word.replace(findNickRegExp, '__NICK__');
-    });
-
-    if (line.length < 2 || line.length < config.power) {
-        return;
-    }
-
-    if (!words[conference]) {
-        words[conference] = {};
-    }
-
-    if (config.power === 1) {
-        addWord(words[conference], '__START__', line[0]);
-
-        for (let i = 1; i < line.length; ++i) {
-            addWord(words[conference], line[i - 1], line[i]);
-        }
-
-        addWord(words[conference], line[line.length - 1], '__END__');
-    } else {
-        let first = _.first(line, config.power - 1);
-
-        addWord(words[conference], '__START__', first.join(' '));
-
-        let history = ['__START__'].concat(first);
-
-        for (let i = config.power - 1; i < line.length; ++i) {
-            addWord(words[conference], history, line[i]);
-            history.shift();
-            history.push(line[i]);
-        }
-
-        addWord(words[conference], history, '__END__');
-    }
-}
-
-function say(conference, message) {
-    queue.push({
-        conference: conference,
-        message: message
-    });
-}
-
-function randomNext(words, length) {
-    if (!words) {
-        return '';
-    }
-
-    let total = words.__TOTAL__ + 1;
-
-    if (length < config.power + 2 && words.__END__) {
-        total -= words.__END__;
-    }
-
-    if (total <= 1) {
-        return '';
-    }
-
-    let random = getRandomInt(0, total);
-
-    for (let key in words) {
-        if (key !== '__TOTAL__' && !(length < config.power + 2 && key === '__END__')) {
-            random -= words[key];
-
-            if (random <= 0) {
-                return key === '__END__' ? '' : key;
+        if (from.startsWith(START)) {
+            if (!this.index.starts[from]) {
+                this.index.starts[from] = 0;
             }
-        }
-    }
 
-    return '';
-}
-
-function talk(words) {
-    if (!words) {
-        return 'Magus: Error line 269';
-    }
-    
-    console.log('Searching in', _.size(words), 'words');
-
-    let result = ['__START__'].concat(randomNext(words.__START__, 0).split(' '));
-
-    if (!result || result.length <= 0) {
-        return 'Magus: Error line 277';
-    }
-
-    while (result.length < 26) {
-        let word = _.last(result, config.power).join(' ');
-
-        if (!words[word] || (result.length > 21 && words[word].__END__)) {
-            break;
+            this.index.starts[from] += 1;
+            this.index.total += 1;
         }
 
-        let next = randomNext(words[word], result.length);
+        dao.set(this.conference, from, data);
+    }
 
-        if (next) {
-            result.push(next);
-        } else {
-            break;
+    async learn(message) {
+        message = message.replace(FIND_NICK_REGEXP, NICK).split(' ');
+
+        if (message.length < config.power) {
+            return;
         }
+
+        let history = [START].concat(_.first(message, config.power));
+        message = _.rest(message, config.power);
+
+        for (const word of message) {
+            this.add(history.join(' '), word);
+            history.shift();
+            history.push(word);
+        }
+
+        this.add(history.join(' '), END);
     }
 
-    // Remove __START__
-    result.shift();
+    async randomNext(from, mode) {
 
-    if (result.length <= 0) {
-        return 'Magus: Error line 300';
     }
 
-    return result.join(' ');
-}
+    async talk() {
+        let output,
+            counter = 0;
+
+        do {
+            let history = [],
+                r = _.random(1, this.index.total);
+
+            for (const key in this.index.starts) {
+                r -= this.index.starts[key];
+
+                if (r <= 0) {
+                    output = key.split(' ');
+                    history = key.split(' ');
+                }
+            }
+
+            while (output.length < config.maximum.hard) {
+                const next = await randomNext(history.join(' '), output.length < config.minimum.hard ? MODE_IGNORE_END : output.length < config.maximum.soft ? MODE_NONE : MODE_FORCE_END);
+
+                if (next === END) {
+                    break;
+                }
+
+                output.push(next);
+                history.shift();
+                history.push(next);
+            }
+
+            // TODO
+
+        } while (output.length < (++counter <= 5 ? config.minimum.soft : config.minimum.hard));
+
+        return output.join(' ');
+    }
+
+    async reindex() {
+        const dir = path.join(config.data, this.conference);
+
+        await Promise.all((await fsReaddir(dir)).map(async (file) => {
+            let data = JSON.parse(await fsReadFile(path.join(dir, file)).toString('utf8'));
+
+            if (data.words.startsWith(START)) {
+                this.index.starts[data.words] = data.total;
+                this.index.total += data.total;
+            }
+        }));
+    }
+
+    async reset() {
+        await Promise.all((await fsReaddir(config.logs)).map(async (file) => {
+            if (file.startsWith(this.conference) && path.extname(file) === '.log') {
+                let content = await fsReadFile(path.join(config.logs, file));
+
+                for (let line of content.toString('utf8').split('\n')) {
+                    if (!line || line[0] !== '(' || line[9] !== ')') {
+                        continue;
+                    }
+
+                    line = line.substring(11);
+
+                    const index = line.indexOf(' : '),
+                          from = line.substring(0, index).trim(),
+                          message = cleanMessage(line.substring(index + 3));
+
+                    if (!from || config.blacklist.includes(from)) {
+                        continue;
+                    }
+
+                    if (message) {
+                        this.learn(message);
+                    }
+                }
+            }
+        }));
+    }
+};
+
+// *****************************
+// Main
+
+let main = async () => {
+    config.blacklist.push(config.nickname);
+
+    const argv = yargs
+
+    .option('reset', {
+        alias: 'r',
+        default: false
+    });
+
+    const reset = argv.reset;
+
+    config.conferences = config.groupchats.map(groupchat => ((groupchat + '@' + config.muc).toLowerCase()));
+
+    await Promise.all([checkDirectory(config.data), checkDirectory(config.logs)].concat(config.conferences.map(conference => checkDirectory(path.join(config.data, conference)))));
+
+    for (const conference of config.conferences) {
+        bots[conference] = new Bot(conference);
+    }
+
+    if (reset) {
+        console.log('Creating data');
+
+        await clearDirectory(config.data);
+        await Promise.all(config.conferences.map(conference => checkDirectory(path.join(config.data, conference))));
+
+        await Promise.all(Object.values(bots).map(bot => bot.reset()));
+    } else {
+        await Promise.all(Object.values(bots).map(bot => bot.reindex()));
+    }
+
+    xmpp.on('groupchat', async (conference, from, message, stamp, delay) => {
+        if (from.toLowerCase() == config.nickname.toLowerCase()) {
+            // Private message
+            return;
+        }
+
+        conference = conference.toLowerCase();
+
+        message = cleanMessage(message);
+
+        let now = moment();
+        fs.appendFileSync(config.logs + '/' + conference.toLowerCase() + '-' + now.format('YYYY-MM-DD') + '.log', '(' + now.format('HH:mm:ss') + ') ' + from + ' : ' + message + '\n');
+
+        if (config.blacklist.includes(from)) {
+            return;
+        }
+
+        let bot = bots[conference];
+
+        await bot.learn(message);
+
+        if (FIND_NICK_REGEXP.test(message)) {
+            let stanza = new Stanza('message', {
+                to: conference,
+                type: 'groupchat',
+                id: config.nickname + new Date()
+            });
+
+            stanza.c('body').t((await bot.talk()).replace(REPLACE_NICK_REGEXP, from));
+
+            xmpp.conn.send(stanza);
+        }
+    });
+
+    xmpp.on('online', data => {
+        for (const conference of config.conferences) {
+            xmpp.join(conference + '/' + config.nickname);
+        }
+    });
+
+    xmpp.on('error', error => {
+        console.error('XMPP Error', error);
+    });
+
+    xmpp.on('close', () => {
+        process.exit(0);
+    });
+
+    xmpp.connect({
+        jid: config.jid,
+        password: config.password,
+        host: config.host,
+        port: config.port
+    });
+};
+
+main();

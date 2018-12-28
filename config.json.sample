@@ -4,7 +4,18 @@
     "host": "chat.codingame.com",
     "port": 5222,
     "muc": "conference.codingame.com",
-    "groupchats": ["general_fr", "general"],
+    "groupchats": ["fr", "ru", "world"],
     "nickname": "Automaton2000",
-    "power": 1
+    "blacklist": [],
+    "data": "./data",
+    "logs": "./logs",
+    "power": 2,
+    "minimum": {
+        "soft": 3,
+        "hard": 5
+    },
+    "maximum": {
+        "soft": 25,
+        "hard": 30
+    }
 }
